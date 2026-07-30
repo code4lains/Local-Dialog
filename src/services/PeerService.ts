@@ -372,6 +372,13 @@ class PeerService {
     useStore.getState().updateMessageFileUrl(fileId, finalUrl);
   }
 
+  /**
+   * 获取底层 Peer 实例（供 DiscoveryService 使用）
+   */
+  getPeer(): Peer | null {
+    return this.peer;
+  }
+
   disconnect() {
     if (this.connection) {
       this.connection.close();

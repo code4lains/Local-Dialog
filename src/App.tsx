@@ -232,7 +232,7 @@ export default function App() {
                         <ListItemText 
                           primary={
                             <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                              {peer.id === localPeerId ? "本机主机" : "未知设备"}
+                              {peer.name || "未知设备"}
                             </Typography>
                           } 
                           secondary={

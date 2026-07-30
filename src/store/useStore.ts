@@ -53,6 +53,7 @@ interface AppState {
   updateMessageProgress: (id: string, progress: number) => void;
   updateMessageFileUrl: (id: string, fileUrl: string) => void;
   addDiscoveredPeer: (peerId: string, name?: string) => void;
+  removeDiscoveredPeers: (peerIds: string[]) => void;
   clearMessages: () => void;
   setPendingConnection: (conn: any | null) => void;
 }
@@ -104,6 +105,11 @@ export const useStore = create<AppState>((set) => ({
         ],
       };
     }),
+
+  removeDiscoveredPeers: (peerIds) =>
+    set((state) => ({
+      discoveredPeers: state.discoveredPeers.filter((p) => !peerIds.includes(p.id)),
+    })),
     
   clearMessages: () => set({ messages: [] }),
   setPendingConnection: (conn) => set({ pendingConnection: conn }),
