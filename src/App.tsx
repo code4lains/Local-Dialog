@@ -70,7 +70,7 @@ function formatBytes(bytes: number = 0) {
 
 export default function App() {
   const {
-    localPeerId, connectionStatus, messages, pendingConnection, remotePeerId, discoveredPeers
+    localPeerId, connectionStatus, connectionMode, messages, pendingConnection, remotePeerId, discoveredPeers
   } = useStore();
 
   const [textInput, setTextInput] = useState('');
@@ -278,7 +278,24 @@ export default function App() {
                 <Box sx={{ p: 2, borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 2, bgcolor: 'rgba(255,255,255,0.01)' }}>
                   <Avatar sx={{ bgcolor: 'secondary.dark' }}><ComputerIcon /></Avatar>
                   <Box>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>已连接的设备</Typography>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
+                      已连接的设备
+                      {connectionMode && (
+                        <Chip 
+                          label={connectionMode} 
+                          size="small" 
+                          sx={{ 
+                            ml: 1.5, 
+                            height: 22, 
+                            fontSize: '0.7rem', 
+                            fontWeight: 'bold',
+                            bgcolor: 'rgba(0,229,255,0.1)', 
+                            color: '#00e5ff', 
+                            border: '1px solid rgba(0,229,255,0.3)' 
+                          }} 
+                        />
+                      )}
+                    </Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>{remotePeerId}</Typography>
                   </Box>
                   <Button 

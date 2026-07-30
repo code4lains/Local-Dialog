@@ -40,6 +40,7 @@ interface AppState {
   localPeerId: string | null;
   localDeviceName: string;
   connectionStatus: ConnectionStatus;
+  connectionMode: string | null; // e.g. "内网", "P2P", "中继"
   remotePeerId: string | null; 
   messages: Message[];
   discoveredPeers: PeerDevice[];
@@ -48,6 +49,7 @@ interface AppState {
   // Actions
   setLocalPeerId: (id: string) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
+  setConnectionMode: (mode: string | null) => void;
   setRemotePeerId: (id: string | null) => void;
   addMessage: (message: Message) => void;
   updateMessageProgress: (id: string, progress: number) => void;
@@ -62,6 +64,7 @@ export const useStore = create<AppState>((set) => ({
   localPeerId: null,
   localDeviceName: getDeviceName(),
   connectionStatus: 'disconnected',
+  connectionMode: null,
   remotePeerId: null,
   messages: [],
   discoveredPeers: [],
@@ -69,6 +72,7 @@ export const useStore = create<AppState>((set) => ({
 
   setLocalPeerId: (id) => set({ localPeerId: id }),
   setConnectionStatus: (status) => set({ connectionStatus: status }),
+  setConnectionMode: (mode) => set({ connectionMode: mode }),
   setRemotePeerId: (id) => set({ remotePeerId: id }),
   
   addMessage: (message) => 

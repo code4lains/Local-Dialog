@@ -218,6 +218,16 @@ class PeerService {
     useStore.getState().setRemotePeerId(conn.peer);
     useStore.getState().addDiscoveredPeer(conn.peer, conn.metadata?.deviceName);
 
+    this.checkConnectionMode(conn);
+
+    if (conn.peerConnection) {
+      conn.peerConnection.addEventListener('iceconnectionstatechange', () => {
+        if (conn.peerConnection.iceConnectionState === 'connected' || conn.peerConnection.iceConnectionState === 'completed') {
+          this.checkConnectionMode(conn);
+        }
+      });
+    }
+
     conn.on('data', (data: any) => {
       this.handleIncomingData(data, conn.peer);
     });
@@ -225,13 +235,53 @@ class PeerService {
     conn.on('close', () => {
       useStore.getState().setConnectionStatus('disconnected');
       useStore.getState().setRemotePeerId(null);
+      useStore.getState().setConnectionMode(null);
       this.connection = null;
     });
 
     conn.on('error', () => {
       useStore.getState().setConnectionStatus('disconnected');
+      useStore.getState().setConnectionMode(null);
       this.connection = null;
     });
+  }
+
+  private async checkConnectionMode(conn: any) {
+    if (!conn.peerConnection) return;
+    try {
+      const pc = conn.peerConnection as RTCPeerConnection;
+      const stats = await pc.getStats();
+      let localCandidateId = '';
+      
+      stats.forEach(report => {
+        if (report.type === 'transport' && report.selectedCandidatePairId) {
+           const pair = stats.get(report.selectedCandidatePairId);
+           if (pair) {
+               localCandidateId = pair.localCandidateId;
+           }
+        }
+        if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.nominated) {
+            localCandidateId = report.localCandidateId;
+        }
+      });
+
+      if (localCandidateId) {
+        const localCandidate = stats.get(localCandidateId);
+        if (localCandidate) {
+          if (localCandidate.candidateType === 'host') {
+            useStore.getState().setConnectionMode('内网 (LAN)');
+          } else if (localCandidate.candidateType === 'srflx') {
+            useStore.getState().setConnectionMode('P2P 直连');
+          } else if (localCandidate.candidateType === 'relay') {
+            useStore.getState().setConnectionMode('中继传输 (Relay)');
+          } else {
+            useStore.getState().setConnectionMode('未知模式');
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to get connection mode', e);
+    }
   }
 
   private handleIncomingData(data: any, senderId: string) {
