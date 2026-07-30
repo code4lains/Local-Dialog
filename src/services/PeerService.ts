@@ -1,5 +1,5 @@
 import Peer from 'peerjs';
-import { useStore, type Message } from '../store/useStore';
+import { useStore } from '../store/useStore';
 
 interface FileMeta {
   id: string;
@@ -159,7 +159,7 @@ class PeerService {
       this.connection = null;
     });
 
-    conn.on('error', (err) => {
+    conn.on('error', (err: any) => {
       useStore.getState().setConnectionStatus('disconnected');
       this.connection = null;
     });

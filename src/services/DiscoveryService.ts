@@ -1,6 +1,6 @@
 import axios from 'axios';
 import peerService from './PeerService';
-import { useStore } from '../store/useStore';
+
 
 /**
  * 简单的字符串哈希函数，将 IP 转换为较短的固定字符串

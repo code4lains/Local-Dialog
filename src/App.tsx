@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   ThemeProvider, createTheme, CssBaseline, Box, Typography,
   TextField, IconButton, Paper, LinearProgress, Button, Dialog,
-  DialogTitle, DialogContent, DialogActions, Chip, List, ListItem, ListItemButton, ListItemText, ListItemAvatar, Avatar, Divider, Snackbar
+  DialogTitle, DialogContent, DialogActions, Chip, List, ListItem, ListItemButton, ListItemText, ListItemAvatar, Avatar, Snackbar
 } from '@mui/material';
 import Send from '@mui/icons-material/Send';
 import AttachFile from '@mui/icons-material/AttachFile';
@@ -161,7 +161,8 @@ export default function App() {
           >
             {/* Header branding */}
             <Box sx={{ p: 3, pb: 2, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-              <Typography variant="h5" fontWeight={800} sx={{
+              <Typography variant="h5" sx={{
+                fontWeight: 800,
                 background: 'linear-gradient(45deg, #7c4dff, #00e5ff)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
@@ -176,7 +177,7 @@ export default function App() {
               {/* My Status Card */}
               <Box sx={{ bgcolor: 'rgba(255,255,255,0.03)', p: 2, borderRadius: 3, border: '1px solid rgba(255,255,255,0.05)' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                  <Typography variant="caption" color="text.secondary" fontWeight="bold">本机标识 ID</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 'bold' }}>本机标识 ID</Typography>
                   <Chip 
                     icon={<SignalCellularAlt fontSize="small" />} 
                     label={connectionStatus === 'connected' ? '已连接' : connectionStatus === 'connecting' ? '连接中' : '等待连接'}
@@ -231,7 +232,7 @@ export default function App() {
                         <ListItemText 
                           primary={peer.id === localPeerId ? "本机主机" : "未知设备"} 
                           secondary={peer.id.substring(0, 15) + '...'} 
-                          primaryTypographyProps={{ variant: 'body2', fontWeight: 'bold' }}
+                          primaryTypographyProps={{ variant: 'body2', sx: { fontWeight: 'bold' } }}
                           secondaryTypographyProps={{ variant: 'caption' }}
                         />
                       </ListItemButton>
@@ -258,7 +259,7 @@ export default function App() {
             {connectionStatus !== 'connected' ? (
               <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', p: 4, textAlign: 'center' }}>
                 <ChatBubbleOutlineIcon sx={{ fontSize: 80, color: 'rgba(255,255,255,0.05)', mb: 3 }} />
-                <Typography variant="h5" color="text.primary" fontWeight="300" sx={{ mb: 2 }}>
+                <Typography variant="h5" color="text.primary" sx={{ fontWeight: '300', mb: 2 }}>
                   准备好发送文件了吗？
                 </Typography>
                 <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 400 }}>
@@ -271,7 +272,7 @@ export default function App() {
                 <Box sx={{ p: 2, borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 2, bgcolor: 'rgba(255,255,255,0.01)' }}>
                   <Avatar sx={{ bgcolor: 'secondary.dark' }}><ComputerIcon /></Avatar>
                   <Box>
-                    <Typography variant="subtitle1" fontWeight="bold">已连接的设备</Typography>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>已连接的设备</Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>{remotePeerId}</Typography>
                   </Box>
                   <Button 
@@ -435,11 +436,11 @@ export default function App() {
         {/* Connection Request Dialog */}
         <Dialog 
           open={!!pendingConnection}
-          PaperProps={{ sx: { bgcolor: 'background.paper', borderRadius: 4, p: 1 } }}
+          sx={{ '& .MuiDialog-paper': { bgcolor: 'background.paper', borderRadius: 4, p: 1 } }}
         >
           <DialogTitle sx={{ fontWeight: 'bold' }}>收到连接请求</DialogTitle>
           <DialogContent>
-            <Typography>设备 <Typography component="span" color="secondary" fontWeight="bold">{pendingConnection?.peer}</Typography> 正在请求与您建立点对点连接，是否允许？</Typography>
+            <Typography>设备 <Typography component="span" color="secondary" sx={{ fontWeight: 'bold' }}>{pendingConnection?.peer}</Typography> 正在请求与您建立点对点连接，是否允许？</Typography>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}>
             <Button onClick={() => pendingConnection && peerService.rejectConnection(pendingConnection)} color="inherit" sx={{ px: 3 }}>
@@ -455,7 +456,7 @@ export default function App() {
         <Dialog 
           open={showRoomDialog} 
           onClose={() => setShowRoomDialog(false)}
-          PaperProps={{ sx: { bgcolor: 'background.paper', borderRadius: 4, p: 1 } }}
+          sx={{ '& .MuiDialog-paper': { bgcolor: 'background.paper', borderRadius: 4, p: 1 } }}
         >
           <DialogTitle sx={{ fontWeight: 'bold', textAlign: 'center' }}>专属传输房间</DialogTitle>
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', px: 4, py: 2 }}>
