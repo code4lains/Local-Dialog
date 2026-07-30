@@ -159,7 +159,7 @@ class PeerService {
       this.connection = null;
     });
 
-    conn.on('error', (err: any) => {
+    conn.on('error', () => {
       useStore.getState().setConnectionStatus('disconnected');
       this.connection = null;
     });

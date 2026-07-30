@@ -230,10 +230,16 @@ export default function App() {
                           </Avatar>
                         </ListItemAvatar>
                         <ListItemText 
-                          primary={peer.id === localPeerId ? "本机主机" : "未知设备"} 
-                          secondary={peer.id.substring(0, 15) + '...'} 
-                          primaryTypographyProps={{ variant: 'body2', sx: { fontWeight: 'bold' } }}
-                          secondaryTypographyProps={{ variant: 'caption' }}
+                          primary={
+                            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                              {peer.id === localPeerId ? "本机主机" : "未知设备"}
+                            </Typography>
+                          } 
+                          secondary={
+                            <Typography variant="caption">
+                              {peer.id.substring(0, 15) + '...'}
+                            </Typography>
+                          }
                         />
                       </ListItemButton>
                     </ListItem>
