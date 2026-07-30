@@ -1,6 +1,16 @@
 import { create } from 'zustand';
 
 
+function getDeviceName() {
+  const ua = navigator.userAgent;
+  if (/windows/i.test(ua)) return 'Windows 电脑';
+  if (/macintosh/i.test(ua)) return 'Mac 电脑';
+  if (/iphone/i.test(ua)) return 'iPhone';
+  if (/ipad/i.test(ua)) return 'iPad';
+  if (/android/i.test(ua)) return 'Android 手机';
+  return '未知设备';
+}
+
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 
 export interface Message {
@@ -28,6 +38,7 @@ export interface PeerDevice {
 
 interface AppState {
   localPeerId: string | null;
+  localDeviceName: string;
   connectionStatus: ConnectionStatus;
   remotePeerId: string | null; 
   messages: Message[];
@@ -48,6 +59,7 @@ interface AppState {
 
 export const useStore = create<AppState>((set) => ({
   localPeerId: null,
+  localDeviceName: getDeviceName(),
   connectionStatus: 'disconnected',
   remotePeerId: null,
   messages: [],

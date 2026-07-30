@@ -39,11 +39,14 @@ class DiscoveryService {
       // 1. 先初始化自己的随机 PeerID
       await peerService.initialize();
 
-      // 2. 尝试连接到大厅的主机
+      // 2. 尝试向大厅的主机发送探测 (Ping)
       console.log(`尝试寻找同局域网内的主机: ${lobbyHostId}`);
       try {
-        await peerService.connect(lobbyHostId);
-        console.log('成功连接到同局域网内的另一台设备！');
+        const hostName = await peerService.ping(lobbyHostId);
+        console.log(`成功探测到同局域网内的主机: ${hostName}！`);
+        // 探测成功，对方会在被 ping 的同时将我们加入它的列表
+        // 我们也把大厅主机加入我们的发现列表
+        useStore.getState().addDiscoveredPeer(lobbyHostId, hostName);
       } catch (err) {
         // 连接失败说明大厅主机不存在，当前设备需要成为大厅主机
         console.log('未找到已存在的主机，当前设备将作为大厅主机...');

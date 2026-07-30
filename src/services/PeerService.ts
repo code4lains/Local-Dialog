@@ -51,11 +51,29 @@ class PeerService {
       });
 
       currentPeer.on('connection', (conn) => {
+        // 如果这是一个探测连接，提取设备名并将其加入发现列表，但不进行完整连接
+        if (conn.metadata && conn.metadata.isPing) {
+          console.log(`收到来自 ${conn.peer} (${conn.metadata.deviceName}) 的探测`);
+          useStore.getState().addDiscoveredPeer(conn.peer, conn.metadata.deviceName);
+          
+          conn.on('open', () => {
+             // 告诉对方我的名字
+             conn.send({ type: 'ping-reply', deviceName: useStore.getState().localDeviceName });
+             setTimeout(() => conn.close(), 1000);
+          });
+          return;
+        }
+
         if (this.connection && this.connection.open) {
           console.warn('已有活动连接，拒绝新连接');
           conn.close();
           return;
         }
+        // 如果附带了设备名，更新到 store
+        if (conn.metadata && conn.metadata.deviceName) {
+          useStore.getState().addDiscoveredPeer(conn.peer, conn.metadata.deviceName);
+        }
+        
         useStore.getState().setPendingConnection(conn);
       });
 
@@ -103,8 +121,12 @@ class PeerService {
     return new Promise((resolve, reject) => {
       if (!this.peer) return reject(new Error('PeerJS 未初始化'));
 
+      const localDeviceName = useStore.getState().localDeviceName;
       useStore.getState().setConnectionStatus('connecting');
-      const conn = this.peer.connect(remotePeerId, { reliable: true });
+      const conn = this.peer.connect(remotePeerId, { 
+        reliable: true,
+        metadata: { deviceName: localDeviceName }
+      });
       
       const onPeerError = (e: any) => {
         const err = e.detail;
@@ -142,12 +164,59 @@ class PeerService {
     });
   }
 
+  // 仅仅发送一个 Ping 去发现设备，不建立真实的聊天连接
+  ping(remotePeerId: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      if (!this.peer) return reject(new Error('PeerJS 未初始化'));
+      
+      const localDeviceName = useStore.getState().localDeviceName;
+      const conn = this.peer.connect(remotePeerId, { 
+        reliable: true,
+        metadata: { isPing: true, deviceName: localDeviceName }
+      });
+
+      const onPeerError = (e: any) => {
+        const err = e.detail;
+        if (err && err.type === 'peer-unavailable' && err.message.includes(remotePeerId)) {
+          cleanup();
+          reject(err);
+        }
+      };
+      window.addEventListener('peer-error', onPeerError);
+
+      const cleanup = () => {
+        window.removeEventListener('peer-error', onPeerError);
+      };
+
+      conn.on('open', () => {
+        cleanup();
+      });
+
+      conn.on('data', (data: any) => {
+        if (data && data.type === 'ping-reply') {
+          resolve(data.deviceName || '大厅主机');
+          setTimeout(() => conn.close(), 500);
+        }
+      });
+
+      conn.on('error', (err) => {
+        cleanup();
+        reject(err);
+      });
+      
+      setTimeout(() => {
+        cleanup();
+        reject(new Error('Ping timeout'));
+      }, 5000);
+    });
+  }
+
   private setupConnection(conn: any) {
     this.connection = conn;
     
     useStore.getState().setConnectionStatus('connected');
     useStore.getState().setRemotePeerId(conn.peer);
-    useStore.getState().addDiscoveredPeer(conn.peer);
+    useStore.getState().addDiscoveredPeer(conn.peer, conn.metadata?.deviceName);
 
     conn.on('data', (data: any) => {
       this.handleIncomingData(data, conn.peer);
