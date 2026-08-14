@@ -73,6 +73,8 @@ class DiscoveryService {
     config: {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478' },
         { urls: 'stun:global.stun.twilio.com:3478' }
       ]
     }
@@ -125,8 +127,9 @@ class DiscoveryService {
       // 2. 尝试作为客户端连接到大厅主机
       const connected = await this.tryJoinLobby();
       if (!connected) {
-        // 3. 大厅主机不存在，自己成为大厅主机
+        // 3. 大厅主机不存在，稍作缓冲让信令服务器清除连接查询状态后，自己尝试成为大厅主机
         console.log('[Discovery] 未找到大厅主机，当前设备将承担大厅主机职责...');
+        await new Promise(r => setTimeout(r, 600));
         await this.becomeLobbyHost();
       }
 
@@ -332,12 +335,12 @@ class DiscoveryService {
             }
           }, 1000);
         } else {
-          console.error('[Discovery] 大厅主机错误:', err);
+          console.warn('[Discovery] 大厅主机创建受限（公网信令限制或网络中断）:', err);
           this.lobbyPeer = null;
           try {
             lobbyPeer.destroy();
           } catch {}
-          reject(err);
+          resolve(); // 降级，不阻断主 Peer 的正常工作与点对点连接
         }
       });
 

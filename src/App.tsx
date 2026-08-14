@@ -169,9 +169,11 @@ export default function App() {
   };
 
   const handleCreateRoom = async () => {
-    const roomId = discoveryService.generateRoomId();
-    await peerService.initialize(roomId);
-    const link = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
+    let peerId = localPeerId;
+    if (!peerId) {
+      peerId = await peerService.initialize();
+    }
+    const link = `${window.location.origin}${window.location.pathname}?room=${peerId}`;
     setCurrentRoomUrl(link);
     setShowRoomDialog(true);
   };
