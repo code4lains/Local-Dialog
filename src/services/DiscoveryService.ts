@@ -8,14 +8,37 @@ type DataConnection = ReturnType<InstanceType<typeof Peer>['connect']>;
 
 
 /**
- * 简单的字符串哈希函数，将 IP 转换为较短的固定字符串
+ * 简单的字符串哈希函数，将字符串转换为较短的固定哈希
  */
 async function hashString(message: string): Promise<string> {
   const msgUint8 = new TextEncoder().encode(message);
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-  return hashHex.substring(0, 12); // 取前 12 位即可
+  return hashHex.substring(0, 12); // 取前 12 位
+}
+
+/**
+ * 尝试通过多个提供商并发/降级获取公网 IP
+ */
+async function fetchPublicIp(): Promise<string | null> {
+  const providers = [
+    'https://api.ipify.org?format=json',
+    'https://api64.ipify.org?format=json',
+    'https://ipapi.co/json/'
+  ];
+
+  for (const url of providers) {
+    try {
+      const res = await axios.get(url, { timeout: 3000 });
+      if (res.data && res.data.ip) {
+        return String(res.data.ip).trim();
+      }
+    } catch {
+      // 尝试下一个接口
+    }
+  }
+  return null;
 }
 
 interface RegisteredPeer {
@@ -29,7 +52,7 @@ interface RegisteredPeer {
  * 
  * 核心思路：
  * - 每台设备用随机 ID 初始化 PeerJS（只初始化一次，永不覆盖）
- * - 基于公网 IP Hash 计算一个固定的 "大厅 Peer ID"
+ * - 基于公网 IP Hash 与可选房间/频道密钥计算固定的 "大厅 Peer ID"
  * - 第一台设备会额外创建一个 Peer 实例作为大厅主机（不影响自己的主 Peer）
  * - 后来的设备连接到大厅主机，注册自己的 Peer ID
  * - 大厅主机维护在线设备列表，并广播给所有已注册的设备
@@ -56,19 +79,43 @@ class DiscoveryService {
   };
 
   /**
-   * 尝试基于公网 IP 自动发现局域网内的设备
+   * 获取自定义频道/群组密钥（解决大内网/校园网/CGNAT冲突）
+   */
+  getChannelKey(): string {
+    return localStorage.getItem('local_dialog_channel') || '';
+  }
+
+  /**
+   * 设置自定义频道密钥并重新发现
+   */
+  async setChannelKey(channel: string) {
+    localStorage.setItem('local_dialog_channel', channel.trim());
+    this.destroy();
+    await this.autoDiscover();
+  }
+
+  /**
+   * 尝试基于公网 IP 与频道设置自动发现局域网内的设备
    */
   async autoDiscover() {
     if (this.isDiscovering) return;
     this.isDiscovering = true;
     try {
-      console.log('[Discovery] 正在获取公网 IP 用于局域网发现...');
-      const response = await axios.get('https://api.ipify.org?format=json');
-      const ip = response.data.ip;
-      console.log('[Discovery] 当前公网 IP:', ip);
+      console.log('[Discovery] 正在获取网络出口信息用于局域网发现...');
+      const ip = await fetchPublicIp();
+      const channel = this.getChannelKey();
+      const channelSuffix = channel ? `-${await hashString(channel)}` : '';
 
-      this.ipHash = await hashString(ip);
-      this.lobbyHostId = `local-drop-lobby-${this.ipHash}`;
+      if (ip) {
+        console.log('[Discovery] 当前公网 IP:', ip);
+        this.ipHash = await hashString(ip);
+        this.lobbyHostId = `local-drop-lobby-${this.ipHash}${channelSuffix}`;
+      } else {
+        console.warn('[Discovery] 未检测到公网出口 IP（离线内网或连接超时），使用本地内网频道');
+        this.lobbyHostId = `local-drop-lobby-offline${channelSuffix}`;
+      }
+
+      console.log(`[Discovery] 目标大厅主机 ID: ${this.lobbyHostId}`);
 
       // 1. 先初始化自己的随机 PeerID（这是唯一一次初始化，后续不会覆盖）
       await peerService.initialize();
@@ -226,45 +273,47 @@ class DiscoveryService {
       lobbyPeer.on('connection', (conn) => {
         console.log(`[Discovery] 大厅收到新设备连接: ${conn.peer}`);
 
-        conn.on('open', () => {
-          conn.on('data', (data: any) => {
-            if (data && data.type === 'lobby-register') {
-              // 注册新设备
-              const peerId = data.peerId as string;
-              const deviceName = data.deviceName as string;
-              console.log(`[Discovery] 注册新设备: ${peerId} (${deviceName})`);
+        conn.on('data', (data: any) => {
+          if (data && data.type === 'lobby-register') {
+            // 注册新设备
+            const peerId = data.peerId as string;
+            const deviceName = data.deviceName as string;
+            console.log(`[Discovery] 注册新设备: ${peerId} (${deviceName})`);
 
-              this.registeredPeers.set(peerId, {
-                peerId,
-                deviceName,
-                lastSeen: Date.now(),
-              });
+            this.registeredPeers.set(peerId, {
+              peerId,
+              deviceName,
+              lastSeen: Date.now(),
+            });
 
-              // 保存连接以便后续广播
-              this.lobbyConnections.set(peerId, conn);
+            // 保存连接以便后续广播
+            this.lobbyConnections.set(peerId, conn);
 
-              // 立即广播更新后的设备列表给所有已连接的设备
-              this.broadcastPeerList();
-            } else if (data && data.type === 'lobby-heartbeat') {
-              // 更新心跳时间
-              const peerId = data.peerId as string;
-              const existing = this.registeredPeers.get(peerId);
-              if (existing) {
-                existing.lastSeen = Date.now();
-              }
+            // 立即广播更新后的设备列表给所有已连接的设备
+            this.broadcastPeerList();
+          } else if (data && data.type === 'lobby-heartbeat') {
+            // 更新心跳时间
+            const peerId = data.peerId as string;
+            const existing = this.registeredPeers.get(peerId);
+            if (existing) {
+              existing.lastSeen = Date.now();
             }
-          });
+          }
+        });
 
-          conn.on('close', () => {
-            // 设备离开，从注册表移除
-            const peerId = this.findPeerIdByConnection(conn);
-            if (peerId) {
-              console.log(`[Discovery] 设备离开: ${peerId}`);
-              this.registeredPeers.delete(peerId);
-              this.lobbyConnections.delete(peerId);
-              this.broadcastPeerList();
-            }
-          });
+        conn.on('close', () => {
+          // 设备离开，从注册表移除
+          const peerId = this.findPeerIdByConnection(conn);
+          if (peerId) {
+            console.log(`[Discovery] 设备离开: ${peerId}`);
+            this.registeredPeers.delete(peerId);
+            this.lobbyConnections.delete(peerId);
+            this.broadcastPeerList();
+          }
+        });
+
+        conn.on('error', (err) => {
+          console.warn(`[Discovery] 大厅客户端连接异常 (${conn.peer}):`, err);
         });
       });
 
@@ -284,6 +333,11 @@ class DiscoveryService {
           }, 1000);
         } else {
           console.error('[Discovery] 大厅主机错误:', err);
+          this.lobbyPeer = null;
+          try {
+            lobbyPeer.destroy();
+          } catch {}
+          reject(err);
         }
       });
 

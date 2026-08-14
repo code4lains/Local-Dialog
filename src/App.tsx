@@ -77,6 +77,10 @@ export default function App() {
   const [showRoomDialog, setShowRoomDialog] = useState(false);
   const [currentRoomUrl, setCurrentRoomUrl] = useState('');
   const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('房间链接已复制到剪贴板');
+  const [isDragging, setIsDragging] = useState(false);
+  const [showManualConnectDialog, setShowManualConnectDialog] = useState(false);
+  const [manualPeerId, setManualPeerId] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
 
@@ -90,9 +94,64 @@ export default function App() {
     init();
   }, []);
 
+  // Prevent browser from navigating to dropped file when dropped outside valid dropzones
+  useEffect(() => {
+    const preventDefaultDrop = (e: DragEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('dragover', preventDefaultDrop);
+    window.addEventListener('drop', preventDefaultDrop);
+    return () => {
+      window.removeEventListener('dragover', preventDefaultDrop);
+      window.removeEventListener('drop', preventDefaultDrop);
+    };
+  }, []);
+
   useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // When connection is established, automatically close any open room / connect dialogs
+  useEffect(() => {
+    if (connectionStatus === 'connected') {
+      setShowRoomDialog(false);
+      setShowManualConnectDialog(false);
+    }
+  }, [connectionStatus]);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (connectionStatus === 'connected') {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (connectionStatus === 'connected') {
+      const files = e.dataTransfer.files;
+      if (files && files.length > 0) {
+        for (let i = 0; i < files.length; i++) {
+          peerService.sendFile(files[i]);
+        }
+      }
+    }
+  };
 
   const handleSendText = () => {
     if (textInput.trim() && connectionStatus === 'connected') {
@@ -119,7 +178,16 @@ export default function App() {
 
   const handleCopyUrl = () => {
     navigator.clipboard.writeText(currentRoomUrl);
+    setSnackbarMessage('房间链接已复制到剪贴板');
     setSnackbarOpen(true);
+  };
+
+  const handleManualConnect = () => {
+    if (manualPeerId.trim()) {
+      peerService.connect(manualPeerId.trim());
+      setShowManualConnectDialog(false);
+      setManualPeerId('');
+    }
   };
 
   return (
@@ -193,15 +261,26 @@ export default function App() {
 
               {/* Action Buttons */}
               {connectionStatus !== 'connected' && (
-                <Button 
-                  variant="contained" 
-                  fullWidth 
-                  startIcon={<QrCode2Icon />}
-                  onClick={handleCreateRoom}
-                  sx={{ mt: 2, py: 1.5, background: 'linear-gradient(45deg, #7c4dff, #5c3ce6)' }}
-                >
-                  创建专属传输房间
-                </Button>
+                <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <Button 
+                    variant="contained" 
+                    fullWidth 
+                    startIcon={<QrCode2Icon />}
+                    onClick={handleCreateRoom}
+                    sx={{ py: 1.2, background: 'linear-gradient(45deg, #7c4dff, #5c3ce6)' }}
+                  >
+                    创建专属传输房间
+                  </Button>
+                  <Button 
+                    variant="outlined" 
+                    fullWidth 
+                    size="small"
+                    onClick={() => setShowManualConnectDialog(true)}
+                    sx={{ py: 0.8, borderColor: 'rgba(255,255,255,0.1)', color: 'text.secondary' }}
+                  >
+                    手动输入对端 ID 连接
+                  </Button>
+                </Box>
               )}
             </Box>
 
@@ -213,9 +292,14 @@ export default function App() {
               </Typography>
               <List sx={{ mt: 1 }}>
                 {discoveredPeers.length === 0 ? (
-                  <Typography variant="body2" color="text.disabled" sx={{ p: 2, textAlign: 'center' }}>
-                    局域网内暂无其他设备...
-                  </Typography>
+                  <Box sx={{ p: 2, textAlign: 'center' }}>
+                    <Typography variant="body2" color="text.disabled" sx={{ mb: 1 }}>
+                      局域网内暂未发现其他设备
+                    </Typography>
+                    <Typography variant="caption" color="text.disabled" sx={{ display: 'block' }}>
+                      若处于不同网络、热点或离线环境，请使用上方“创建房间”扫码或“手动输入 ID”发起直连。
+                    </Typography>
+                  </Box>
                 ) : (
                   discoveredPeers.map(peer => (
                     <ListItem disablePadding key={peer.id} sx={{ mb: 1 }}>
@@ -252,16 +336,56 @@ export default function App() {
           {/* Right Main Area (Chat & Transfer) */}
           <Paper 
             elevation={6} 
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
             sx={{ 
               flex: 1, 
               display: { xs: connectionStatus === 'connected' ? 'flex' : 'none', md: 'flex' }, 
               flexDirection: 'column', 
               borderRadius: { xs: 0, md: 4 }, 
-              border: '1px solid rgba(255,255,255,0.05)',
+              border: isDragging ? '1px dashed #7c4dff' : '1px solid rgba(255,255,255,0.05)',
               bgcolor: 'rgba(18, 18, 26, 0.8)',
-              overflow: 'hidden'
+              overflow: 'hidden',
+              position: 'relative'
             }}
           >
+            {/* Drag and drop overlay */}
+            {isDragging && connectionStatus === 'connected' && (
+              <Box sx={{
+                position: 'absolute',
+                inset: 0,
+                bgcolor: 'rgba(18, 18, 26, 0.85)',
+                backdropFilter: 'blur(8px)',
+                zIndex: 10,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none',
+                gap: 2
+              }}>
+                <Box sx={{
+                  p: 3,
+                  bgcolor: 'rgba(124, 77, 255, 0.15)',
+                  borderRadius: '50%',
+                  border: '2px dashed #7c4dff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <AttachFile sx={{ fontSize: 48, color: '#7c4dff' }} />
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#fff' }}>
+                  释放文件以立即发送
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  支持任意大小文件，自动切片点对点直传
+                </Typography>
+              </Box>
+            )}
+
             {connectionStatus !== 'connected' ? (
               <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', p: 4, textAlign: 'center' }}>
                 <ChatBubbleOutlineIcon sx={{ fontSize: 80, color: 'rgba(255,255,255,0.05)', mb: 3 }} />
@@ -279,7 +403,7 @@ export default function App() {
                   <Avatar sx={{ bgcolor: 'secondary.dark' }}><ComputerIcon /></Avatar>
                   <Box>
                     <Typography variant="subtitle1" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
-                      已连接的设备
+                      {discoveredPeers.find(p => p.id === remotePeerId)?.name || '已连接的设备'}
                       {connectionMode && (
                         <Chip 
                           label={connectionMode} 
@@ -420,7 +544,12 @@ export default function App() {
                       placeholder="输入消息，回车发送..."
                       value={textInput}
                       onChange={(e) => setTextInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSendText()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                          e.preventDefault();
+                          handleSendText();
+                        }
+                      }}
                       sx={{
                         '& .MuiOutlinedInput-root': {
                           bgcolor: 'rgba(255,255,255,0.02)',
@@ -463,14 +592,76 @@ export default function App() {
         >
           <DialogTitle sx={{ fontWeight: 'bold' }}>收到连接请求</DialogTitle>
           <DialogContent>
-            <Typography>设备 <Typography component="span" color="secondary" sx={{ fontWeight: 'bold' }}>{pendingConnection?.peer}</Typography> 正在请求与您建立点对点连接，是否允许？</Typography>
+            <Typography>
+              设备 <Typography component="span" color="secondary" sx={{ fontWeight: 'bold' }}>
+                {pendingConnection?.metadata?.deviceName || pendingConnection?.peer}
+              </Typography> 正在请求与您建立点对点直连，是否允许？
+            </Typography>
+            {pendingConnection?.metadata?.deviceName && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, fontFamily: 'monospace' }}>
+                ID: {pendingConnection?.peer}
+              </Typography>
+            )}
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}>
             <Button onClick={() => pendingConnection && peerService.rejectConnection(pendingConnection)} color="inherit" sx={{ px: 3 }}>
               拒绝
             </Button>
-            <Button onClick={() => pendingConnection && peerService.acceptConnection(pendingConnection)} variant="contained" color="primary" sx={{ px: 4 }}>
+            <Button 
+              onClick={() => {
+                if (pendingConnection) {
+                  setShowRoomDialog(false);
+                  setShowManualConnectDialog(false);
+                  peerService.acceptConnection(pendingConnection);
+                }
+              }} 
+              variant="contained" 
+              color="primary" 
+              sx={{ px: 4 }}
+            >
               允许
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Manual Connect Dialog */}
+        <Dialog 
+          open={showManualConnectDialog} 
+          onClose={() => setShowManualConnectDialog(false)}
+          sx={{ '& .MuiDialog-paper': { bgcolor: 'background.paper', borderRadius: 4, p: 1, minWidth: { xs: '90%', sm: 380 } } }}
+        >
+          <DialogTitle sx={{ fontWeight: 'bold' }}>手动连接对端设备</DialogTitle>
+          <DialogContent sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              当两台设备处于不同局域网、不同出口 IP 或手机热点时，可直接输入对方界面的“本机标识 ID”发起直连：
+            </Typography>
+            <TextField 
+              fullWidth 
+              variant="outlined" 
+              placeholder="例如: 3a1f9e2b-4c8d-..."
+              value={manualPeerId}
+              onChange={(e) => setManualPeerId(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleManualConnect();
+                }
+              }}
+              size="small"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  bgcolor: 'rgba(255,255,255,0.02)',
+                  borderRadius: 2,
+                }
+              }}
+            />
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button onClick={() => setShowManualConnectDialog(false)} color="inherit">
+              取消
+            </Button>
+            <Button onClick={handleManualConnect} variant="contained" color="primary" disabled={!manualPeerId.trim()}>
+              发起连接
             </Button>
           </DialogActions>
         </Dialog>
@@ -509,7 +700,7 @@ export default function App() {
         open={snackbarOpen}
         autoHideDuration={2000}
         onClose={() => setSnackbarOpen(false)}
-        message="房间链接已复制到剪贴板"
+        message={snackbarMessage}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       />
     </ThemeProvider>

@@ -237,12 +237,14 @@ class PeerService {
       useStore.getState().setRemotePeerId(null);
       useStore.getState().setConnectionMode(null);
       this.connection = null;
+      this.incomingFiles = {};
     });
 
     conn.on('error', () => {
       useStore.getState().setConnectionStatus('disconnected');
       useStore.getState().setConnectionMode(null);
       this.connection = null;
+      this.incomingFiles = {};
     });
   }
 
@@ -392,6 +394,11 @@ class PeerService {
 
     // 读取并发送切片
     for (let i = 0; i < totalChunks; i++) {
+      if (!this.connection || !this.connection.open) {
+        console.warn('连接已断开，终止文件发送');
+        return;
+      }
+
       const start = i * chunkSize;
       const end = Math.min(file.size, start + chunkSize);
       const chunkBlob = file.slice(start, end);
@@ -402,8 +409,17 @@ class PeerService {
       if (rtcDataChannel) {
         // 当缓冲超过 1MB 时稍作等待
         while (rtcDataChannel.bufferedAmount > 1024 * 1024) {
+          if (!this.connection || !this.connection.open) {
+            console.warn('连接已断开，终止文件发送');
+            return;
+          }
           await new Promise(r => setTimeout(r, 10));
         }
+      }
+
+      if (!this.connection || !this.connection.open) {
+        console.warn('连接已断开，终止文件发送');
+        return;
       }
 
       this.connection.send({
@@ -430,6 +446,7 @@ class PeerService {
   }
 
   disconnect() {
+    this.incomingFiles = {};
     if (this.connection) {
       this.connection.close();
       this.connection = null;
@@ -437,6 +454,7 @@ class PeerService {
   }
 
   destroy() {
+    this.incomingFiles = {};
     if (this.peer) {
       this.peer.destroy();
       this.peer = null;
